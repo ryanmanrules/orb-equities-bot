@@ -1,0 +1,7 @@
+trades.db
+bot.log
+bot.log.*
+*.pyc
+__pycache__/
+.env
+EMERGENCY_STOP
