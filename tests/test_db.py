@@ -1,12 +1,5 @@
-import pytest
 import config
 import db
-
-
-@pytest.fixture(autouse=True)
-def setup(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "DB_PATH", str(tmp_path / "test.db"))
-    db.init_db()
 
 
 def test_init_creates_tables():
@@ -24,9 +17,9 @@ def test_init_creates_tables():
 
 
 def test_insert_and_close_trade():
-    tid = db.insert_trade("AAPL", 150.0, 10, 1500.0, 148.0, 154.0, 0.8, "paper")
+    tid = db.insert_trade("AAPL", 150.0, 10, 1500.0, 148.0, 154.0, 1, "paper")
     assert tid > 0
-    db.close_trade(tid, 154.0, 0.027, "take_profit")
+    db.close_trade(tid, 154.0, "take_profit")
     trades = db.get_closed_trades()
     assert len(trades) == 1
     assert trades[0]["symbol"] == "AAPL"

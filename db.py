@@ -9,6 +9,10 @@ def get_conn():
     conn.row_factory = sqlite3.Row
     try:
         yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -66,8 +70,10 @@ def init_db():
             conviction_score INTEGER DEFAULT 0,
             included INTEGER DEFAULT 0
         );
+        CREATE INDEX IF NOT EXISTS idx_trades_closed_at ON trades(closed_at);
+        CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
+        CREATE INDEX IF NOT EXISTS idx_trades_open ON trades(exit_reason);
         """)
-        conn.commit()
 
 
 def insert_trade(symbol, entry_price, shares, size_usd, stop_price, target_price,
@@ -82,28 +88,27 @@ def insert_trade(symbol, entry_price, shares, size_usd, stop_price, target_price
             (symbol, entry_price, shares, size_usd, stop_price, target_price,
              conviction_score, mode, datetime.now(timezone.utc).isoformat())
         )
-        conn.commit()
         return cur.lastrowid
 
 
-def close_trade(trade_id, exit_price, pnl_pct, exit_reason, exit_order_id=None):
+def close_trade(trade_id, exit_price, exit_reason, exit_order_id=None):
     from datetime import datetime, timezone
     with get_conn() as conn:
         row = conn.execute("SELECT entry_price, shares FROM trades WHERE id=?",
                            (trade_id,)).fetchone()
         pnl_usd = (exit_price - row["entry_price"]) * row["shares"] if row else None
+        pnl_pct = pnl_usd / (row["entry_price"] * row["shares"]) if row else None
         conn.execute(
             """UPDATE trades SET exit_price=?, pnl_usd=?, pnl_pct=?,
                exit_reason=?, closed_at=?, exit_order_id=? WHERE id=?""",
             (exit_price, pnl_usd, pnl_pct, exit_reason,
              datetime.now(timezone.utc).isoformat(), exit_order_id, trade_id)
         )
-        conn.commit()
 
 
 def get_closed_trades(days=None):
     with get_conn() as conn:
-        if days:
+        if days is not None:
             rows = conn.execute(
                 "SELECT * FROM trades WHERE exit_reason IS NOT NULL "
                 "AND closed_at >= datetime('now', ? || ' days') ORDER BY closed_at DESC",
@@ -132,7 +137,6 @@ def set_state(key, value):
             "INSERT OR REPLACE INTO bot_state (key, value, updated_at) VALUES (?, ?, ?)",
             (key, str(value), datetime.now(timezone.utc).isoformat())
         )
-        conn.commit()
 
 
 def get_state():
@@ -147,7 +151,6 @@ def log_event(event_type, value, note=""):
             "INSERT INTO events (event_type, value, note) VALUES (?, ?, ?)",
             (event_type, value, note)
         )
-        conn.commit()
 
 
 def get_events(limit=50):
@@ -169,7 +172,6 @@ def upsert_opening_range(date, symbol, range_high, range_low):
                range_width=excluded.range_width""",
             (date, symbol, range_high, range_low, round(range_high - range_low, 4))
         )
-        conn.commit()
 
 
 def get_opening_ranges(date):
@@ -186,7 +188,6 @@ def mark_range_triggered(date, symbol):
             "UPDATE opening_ranges SET triggered=1 WHERE date=? AND symbol=?",
             (date, symbol)
         )
-        conn.commit()
 
 
 def log_watchlist_entry(date, symbol, gap_pct, premarket_volume, conviction_score, included):
@@ -197,7 +198,6 @@ def log_watchlist_entry(date, symbol, gap_pct, premarket_volume, conviction_scor
                VALUES (?, ?, ?, ?, ?, ?)""",
             (date, symbol, gap_pct, premarket_volume, conviction_score, int(included))
         )
-        conn.commit()
 
 
 def get_watchlist_log(date):
