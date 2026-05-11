@@ -96,3 +96,16 @@ def test_close_symbol_position(mock_trading_client):
     import data
     data.close_symbol_position("AAPL")
     mock_trading_client.close_position.assert_called_once_with("AAPL")
+
+
+def test_get_alpaca_positions_returns_dict(mock_trading_client):
+    import data
+    pos1 = MagicMock()
+    pos1.symbol = "AAPL"
+    pos1.qty = "10"
+    pos2 = MagicMock()
+    pos2.symbol = "SPY"
+    pos2.qty = "5"
+    mock_trading_client.get_all_positions.return_value = [pos1, pos2]
+    result = data.get_alpaca_positions()
+    assert result == {"AAPL": 10, "SPY": 5}
